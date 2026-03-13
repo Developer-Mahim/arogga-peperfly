@@ -1,1 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Data Extractor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold flex items-center gap-2 text-indigo-700">
+                    <i data-lucide="scan-line" class="w-7 h-7"></i>
+                    QR Data Extractor
+                </h1>
+                <p class="text-slate-500 text-sm mt-1">
+                    Scan JSON QR codes. Extracts <code class="bg-slate-100 px-1 py-0.5 rounded text-indigo-600">o</code> and <code class="bg-slate-100 px-1 py-0.5 rounded text-indigo-600">seq</code> into a spreadsheet format.
+                </p>
+            </div>
 
+            <!-- Quick Stats & Global Actions -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="bg-slate-100 px-4 py-2 rounded-lg flex items-center gap-2 border border-slate-200">
+                    <i data-lucide="list-ordered" class="w-4 h-4 text-slate-500"></i>
+                    <span id="scan-count" class="font-semibold">0</span>
+                    <span class="text-slate-500 text-sm">Rows</span>
+                </div>
+                
+                <button 
+                    id="btn-copy-outputs"
+                    onclick="copyAllOutputs()"
+                    class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm opacity-50 cursor-not-allowed"
+                    disabled
+                >
+                    <i data-lucide="copy" class="w-4 h-4"></i>
+                    Copy Outputs
+                </button>
+                
+                <button 
+                    id="btn-copy-inputs"
+                    onclick="copyAllInputs()"
+                    class="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-lg font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm opacity-50 cursor-not-allowed"
+                    disabled
+                >
+                    <i data-lucide="file-json" class="w-4 h-4"></i>
+                    Copy Inputs
+                </button>
+
+                <button 
+                    id="btn-clear-all"
+                    onclick="clearAll()"
+                    class="p-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm opacity-50 cursor-not-allowed"
+                    title="Clear All Data"
+                    disabled
+                >
+                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Scanner Input Area -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <label for="scanner-input" class="block text-sm font-semibold text-slate-700 mb-2">
+                Scanner Input Field (Keep focused while scanning)
+            </label>
+            <div class="flex gap-2">
+                <input
+                    id="scanner-input"
+                    type="text"
+                    placeholder='Scan QR or paste JSON here e.g. {"o":4353337,"seq":"A"...}'
+                    class="flex-1 bg-slate-50 border border-indigo-200 text-slate-800 text-lg rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-3 font-mono shadow-inner"
+                    autocomplete="off"
+                />
+                <button 
+                    onclick="handleManualAdd()"
+                    class="px-6 py-3 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-colors flex items-center gap-2"
+                >
+                    <i data-lucide="refresh-ccw" class="w-5 h-5"></i>
+                    Add
+                </button>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-slate-600">
+                    <thead class="text-xs text-slate-700 uppercase bg-slate-100 border-b border-slate-200">
+                        <tr>
+                            <th scope="col" class="px-4 py-3 w-16 text-center">#</th>
+                            <th scope="col" class="px-4 py-3 w-32">Time</th>
+                            <th scope="col" class="px-4 py-3 border-r border-slate-200">Raw Scanned JSON</th>
+                            <th scope="col" class="px-4 py-3 bg-indigo-50/50 w-32">Extracted 'o'</th>
+                            <th scope="col" class="px-4 py-3 bg-indigo-50/50 w-32">Extracted 'seq'</th>
+                            <th scope="col" class="px-4 py-3 bg-indigo-50 text-indigo-900 font-bold border-l border-indigo-100">Final Output</th>
+                            <th scope="col" class="px-4 py-3 w-20 text-center">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- Data rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-3 transition-opacity duration-300 opacity-0 pointer-events-none shadow-slate-800/20">
+        <span id="toast-icon-container">
+            <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
+        </span>
+        <span id="toast-message" class="font-medium"></span>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // State
+        let scans = [];
+        let toastTimer;
+        let audioCtx = null;
+
+        // DOM Elements
+        const inputEl = document.getElementById('scanner-input');
+        const tableBody = document.getElementById('table-body');
+        const scanCountEl = document.getElementById('scan-count');
+        const toastEl = document.getElementById('toast');
+        const toastMessageEl = document.getElementById('toast-message');
+        const toastIconContainer = document.getElementById('toast-icon-container');
+        const btnCopyOut = document.getElementById('btn-copy-outputs');
+        const btnCopyIn = document.getElementById('btn-copy-inputs');
+        const btnClear = document.getElementById('btn-clear-all');
+
+        // Initialize icons
+        lucide.createIcons();
+
+        // Keep input focused automatically
+        window.addEventListener('DOMContentLoaded', () => {
+            inputEl.focus();
+            renderTable(); // Initial empty state render
+        });
+
+        // Utility: Escape HTML to prevent XSS and broken attributes
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.toString()
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Play Beep Sound for Duplicates
+        function playBeep() {
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+
+                // Create a clear, slightly jarring square wave beep
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(400, audioCtx.currentTime); 
+                
+                // Volume control
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.2); // Play for 200ms
+            } catch (e) {
+                console.error("Audio playback failed", e);
+            }
+        }
+
+        // Toast functionality
+        function showToast(message, type = 'success') {
+            toastMessageEl.textContent = message;
+            
+            // Adjust toast styling based on type (success/error)
+            if (type === 'error') {
+                toastIconContainer.innerHTML = '<i data-lucide="alert-triangle" class="w-5 h-5 text-red-400"></i>';
+                toastEl.classList.remove('bg-slate-800');
+                toastEl.classList.add('bg-red-900');
+            } else {
+                toastIconContainer.innerHTML = '<i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>';
+                toastEl.classList.remove('bg-red-900');
+                toastEl.classList.add('bg-slate-800');
+            }
+            lucide.createIcons({ root: toastIconContainer });
+
+            // Show Toast
+            toastEl.classList.remove('opacity-0', 'pointer-events-none');
+            toastEl.classList.add('opacity-100', 'animate-bounce');
+
+            if (toastTimer) clearTimeout(toastTimer);
+            
+            // Hide Toast
+            toastTimer = setTimeout(() => {
+                toastEl.classList.remove('opacity-100', 'animate-bounce');
+                toastEl.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // Robust copy function
+        async function copyToClipboard(text, successMessage) {
+            if (!text) {
+                showToast("Nothing to copy!", "error");
+                return;
+            }
+            
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    showToast(successMessage, "success");
+                } else {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-999999px";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    document.execCommand('copy');
+                    textArea.remove();
+                    showToast(successMessage, "success");
+                }
+            } catch (err) {
+                showToast("Failed to copy data", "error");
+                console.error("Copy failed:", err);
+            }
+        }
+
+        // Core processing logic
+        function processInput(text) {
+            const rawText = text.trim();
+            if (!rawText) return;
+
+            const newScan = {
+                id: Date.now() + Math.random().toString(36).substr(2, 9),
+                raw: rawText,
+                timestamp: new Date().toLocaleTimeString(),
+                o: '',
+                seq: '',
+                formatted: '',
+                isValid: false
+            };
+
+            try {
+                const parsed = JSON.parse(rawText);
+                
+                const oVal = parsed.o !== undefined ? parsed.o : '';
+                const seqVal = parsed.seq !== undefined ? parsed.seq : '';
+                
+                if (oVal !== '' || seqVal !== '') {
+                    newScan.o = oVal;
+                    newScan.seq = seqVal;
+                    newScan.formatted = `${oVal} ${seqVal}`.trim();
+                    newScan.isValid = true;
+
+                    // --- DUPLICATE CHECK LOGIC ---
+                    const isDuplicate = scans.some(scan => scan.isValid && scan.formatted === newScan.formatted);
+                    if (isDuplicate) {
+                        playBeep();
+                        showToast(`Duplicate found! Entry ignored.`, 'error');
+                        inputEl.value = ''; // Clear input for the next scan
+                        return; // Exit without adding or rendering
+                    }
+                    // -----------------------------
+
+                } else {
+                    newScan.formatted = "Missing 'o' or 'seq'";
+                }
+            } catch (e) {
+                newScan.formatted = "Invalid JSON format";
+            }
+
+            scans.unshift(newScan); // Add to beginning (TOP of list)
+            inputEl.value = ''; // Clear input
+            
+            renderTable();
+        }
+
+        // Event Listeners
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processInput(inputEl.value);
+            }
+        });
+
+        function handleManualAdd() {
+            processInput(inputEl.value);
+            inputEl.focus();
+        }
+
+        function deleteScan(idToDelete) {
+            scans = scans.filter(scan => scan.id !== idToDelete);
+            renderTable();
+            inputEl.focus();
+        }
+
+        function clearAll() {
+            if(window.confirm("Are you sure you want to clear all scanned data?")) {
+                scans = [];
+                renderTable();
+                showToast("All data cleared", "success");
+            }
+            inputEl.focus();
+        }
+
+        function copyAllOutputs() {
+            const validOutputs = scans
+                .filter(s => s.isValid)
+                .map(s => s.formatted)
+                .join('\n');
+            copyToClipboard(validOutputs, "Copied all outputs to clipboard!");
+            inputEl.focus();
+        }
+
+        function copyAllInputs() {
+            const rawInputs = scans.map(s => s.raw).join('\n');
+            copyToClipboard(rawInputs, "Copied all raw JSON inputs!");
+            inputEl.focus();
+        }
+
+        // UI Rendering
+        function renderTable() {
+            // Update stats
+            scanCountEl.textContent = scans.length;
+
+            // Toggle button states
+            const buttons = [btnCopyOut, btnCopyIn, btnClear];
+            if (scans.length === 0) {
+                buttons.forEach(btn => {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                });
+            } else {
+                buttons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                });
+            }
+
+            // Render table content
+            if (scans.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-slate-400">
+                            <i data-lucide="scan-line" class="w-12 h-12 mx-auto mb-3 opacity-20 block"></i>
+                            <p class="text-lg">No data scanned yet.</p>
+                            <p class="text-sm mt-1">Focus the input box above and scan your QR codes.</p>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                tableBody.innerHTML = scans.map((scan, index) => `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors ${!scan.isValid ? 'bg-red-50 hover:bg-red-100' : ''}">
+                        <td class="px-4 py-3 text-center font-medium text-slate-400">
+                            ${scans.length - index}
+                        </td>
+                        <td class="px-4 py-3 text-slate-400 text-xs">
+                            ${scan.timestamp}
+                        </td>
+                        <td class="px-4 py-3 border-r border-slate-200">
+                            <div class="font-mono text-xs text-slate-500 truncate max-w-xs md:max-w-md" title="${escapeHtml(scan.raw)}">
+                                ${escapeHtml(scan.raw)}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 font-mono text-slate-700 bg-indigo-50/20">
+                            ${scan.isValid ? escapeHtml(scan.o) : '-'}
+                        </td>
+                        <td class="px-4 py-3 font-mono text-slate-700 bg-indigo-50/20">
+                            ${scan.isValid ? escapeHtml(scan.seq) : '-'}
+                        </td>
+                        <td class="px-4 py-3 bg-indigo-50/40 border-l border-indigo-100">
+                            ${scan.isValid ? `
+                                <div class="flex items-center gap-2 text-indigo-700 font-bold font-mono">
+                                    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500"></i>
+                                    ${escapeHtml(scan.formatted)}
+                                </div>
+                            ` : `
+                                <div class="flex items-center gap-2 text-red-600 font-medium text-xs">
+                                    <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                                    ${escapeHtml(scan.formatted)}
+                                </div>
+                            `}
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <button 
+                                onclick="deleteScan('${scan.id}')"
+                                class="text-slate-400 hover:text-red-500 transition-colors p-1"
+                                title="Delete Row"
+                            >
+                               <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+
+            // Re-initialize icons for newly added DOM elements
+            lucide.createIcons();
+        }
+    </script>
+</body>
+  </html>
